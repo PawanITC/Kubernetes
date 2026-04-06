@@ -23,6 +23,8 @@ spec:
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
+    - group: "argoproj.io"
+      kind: Application
 
   # Namespace-scoped resources this project can manage
   namespaceResourceWhitelist:
