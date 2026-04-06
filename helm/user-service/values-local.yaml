@@ -1,0 +1,70 @@
+# ============================================================
+# Local / Docker Desktop overrides for user-service
+# Usage: helm upgrade --install user-service ./helm/user-service \
+#          -f helm/user-service/values-local.yaml -n microservices
+# ============================================================
+
+replicaCount: 1
+
+image:
+  # Use locally built image — never pull from registry
+  pullPolicy: Never
+  tag: "latest"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+
+# Use H2 in-memory database — no external DB required locally
+configMap:
+  SPRING_PROFILES_ACTIVE: "default"
+  SERVER_PORT: "8081"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus,h2-console"
+  LOGGING_LEVEL_COM_EXAMPLE_USERSERVICE: "DEBUG"
+  SPRING_H2_CONSOLE_ENABLED: "true"
+
+# No database secret needed for H2
+database:
+  existingSecret: ""
+
+# Allow writes to container filesystem (easier local debugging)
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1001
+  capabilities:
+    drop: ["ALL"]
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: microservices.local
+      paths:
+        - path: /api/v1/users
+          pathType: Prefix
+        - path: /swagger-ui
+          pathType: Prefix
+  tls: []
+
+pdb:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
+
+# Spread constraints not needed with a single node
+topologySpreadConstraints: []
+affinity: {}

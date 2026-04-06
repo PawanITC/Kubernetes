@@ -1,0 +1,24 @@
+# PodDisruptionBudgets ensure high availability during node drains and cluster upgrades.
+# minAvailable=2 means at least 2 pods must be running during any voluntary disruption.
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service-pdb
+  namespace: microservices
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: user-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: order-service-pdb
+  namespace: microservices
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: order-service

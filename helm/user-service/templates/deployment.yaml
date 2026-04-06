@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "user-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "user-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "user-service.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Allow 1 extra pod during update
+      maxUnavailable: 0  # Never reduce below desired count (zero-downtime)
+  template:
+    metadata:
+      labels:
+        {{- include "user-service.labels" . | nindent 8 }}
+        version: {{ .Values.image.tag | quote }}
+      annotations:
+        # Restart pods when ConfigMap changes (checksum forces rollout)
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "user-service.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      # Pod-level security context
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      # Spread pods across nodes for high availability
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          # Container-level security context (hardened)
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          # Load all env vars from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: {{ include "user-service.fullname" . }}-config
+          # Inject database credentials from Secret
+          {{- if .Values.database.existingSecret }}
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.usernameKey }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.passwordKey }}
+          {{- end }}
+          # Resource requests and limits (right-sized per environment)
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # Startup probe: give the JVM time to start before liveness kicks in
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          # Liveness probe: restart container if it becomes unhealthy
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          # Readiness probe: only route traffic when app is ready
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          # Graceful shutdown: allow in-flight requests to complete
+          lifecycle:
+            preStop:
+              exec:
+                # Sleep lets the load balancer deregister the pod before SIGTERM
+                command: ["/bin/sh", "-c", "sleep 15"]
+          # Volume mounts required when readOnlyRootFilesystem=true
+          {{- with .Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      # Extra volumes (emptyDir for /tmp and /app/logs)
+      {{- with .Values.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

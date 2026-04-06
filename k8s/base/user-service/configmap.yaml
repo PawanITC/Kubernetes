@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-config
+  namespace: microservices
+  labels:
+    app.kubernetes.io/name: user-service
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  SERVER_PORT: "8081"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+  LOGGING_LEVEL_COM_EXAMPLE_USERSERVICE: "INFO"
+  SPRING_JPA_SHOW_SQL: "false"

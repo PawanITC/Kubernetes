@@ -1,0 +1,17 @@
+apiVersion: v2
+name: order-service
+description: Helm chart for the Order Service microservice — manages orders and calls user-service
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - java
+  - spring-boot
+  - microservice
+  - order-management
+  - rest-api
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+sources:
+  - https://github.com/PawanITC/Kubernetes

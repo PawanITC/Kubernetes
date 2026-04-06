@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: microservices
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Microservices platform — user-service and order-service
+
+  # Allow syncing from any git repo (restrict to your org in production)
+  sourceRepos:
+    - "https://github.com/PawanITC/Kubernetes.git"
+    - "https://charts.helm.sh/stable"
+
+  destinations:
+    - namespace: microservices
+      server: https://kubernetes.default.svc
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+
+  # Cluster-scoped resources this project can manage
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  # Namespace-scoped resources this project can manage
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: ServiceAccount
+    - group: "networking.k8s.io"
+      kind: Ingress
+    - group: "networking.k8s.io"
+      kind: NetworkPolicy
+    - group: "autoscaling"
+      kind: HorizontalPodAutoscaler
+    - group: "policy"
+      kind: PodDisruptionBudget
+    - group: "rbac.authorization.k8s.io"
+      kind: Role
+    - group: "rbac.authorization.k8s.io"
+      kind: RoleBinding
+    - group: "monitoring.coreos.com"
+      kind: ServiceMonitor
+
+  orphanedResources:
+    warn: true
+
+  roles:
+    - name: read-only
+      description: Read-only access to the microservices project
+      policies:
+        - p, proj:microservices:read-only, applications, get, microservices/*, allow

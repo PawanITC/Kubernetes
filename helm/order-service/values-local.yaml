@@ -1,0 +1,60 @@
+# ============================================================
+# Local / Docker Desktop overrides for order-service
+# ============================================================
+
+replicaCount: 1
+
+image:
+  pullPolicy: Never
+  tag: "latest"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+
+configMap:
+  SPRING_PROFILES_ACTIVE: "default"
+  SERVER_PORT: "8082"
+  # When running locally, user-service is accessed via Kubernetes service name
+  USER_SERVICE_URL: "http://user-service"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus,h2-console"
+  LOGGING_LEVEL_COM_EXAMPLE_ORDERSERVICE: "DEBUG"
+  SPRING_H2_CONSOLE_ENABLED: "true"
+
+database:
+  existingSecret: ""
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1001
+  capabilities:
+    drop: ["ALL"]
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: microservices.local
+      paths:
+        - path: /api/v1/orders
+          pathType: Prefix
+  tls: []
+
+pdb:
+  enabled: false
+networkPolicy:
+  enabled: false
+serviceMonitor:
+  enabled: false
+topologySpreadConstraints: []
+affinity: {}

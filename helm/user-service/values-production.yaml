@@ -1,0 +1,78 @@
+# ============================================================
+# Production overrides for user-service
+# Usage: helm upgrade --install user-service ./helm/user-service \
+#          -f helm/user-service/values-production.yaml \
+#          --set image.tag=$IMAGE_TAG -n microservices
+# ============================================================
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/pawanITC/user-service
+  pullPolicy: Always
+  # tag: set via --set image.tag=$GIT_SHA in CI/CD pipeline
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+configMap:
+  SPRING_PROFILES_ACTIVE: "prod"
+  SERVER_PORT: "8081"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+  LOGGING_LEVEL_COM_EXAMPLE_USERSERVICE: "WARN"
+  SPRING_JPA_SHOW_SQL: "false"
+
+database:
+  host: postgres-user-service.microservices.svc.cluster.local
+  port: "5432"
+  name: userdb
+  existingSecret: user-service-secret
+  usernameKey: DB_USERNAME
+  passwordKey: DB_PASSWORD
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.example.com"
+  hosts:
+    - host: api.example.com
+      paths:
+        - path: /api/v1/users
+          pathType: Prefix
+  tls:
+    - secretName: api-example-com-tls
+      hosts:
+        - api.example.com
+
+pdb:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /actuator/prometheus
+  namespace: monitoring
+
+terminationGracePeriodSeconds: 60

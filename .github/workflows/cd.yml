@@ -1,0 +1,94 @@
+name: CD — Deploy to Production
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: choice
+        options: [production, staging]
+        default: production
+      image_tag:
+        description: Image tag to deploy (leave empty for latest SHA)
+        required: false
+        default: ""
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'production' }}
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    concurrency:
+      group: deploy-${{ github.event.inputs.environment || 'production' }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [[ -n "${{ github.event.inputs.image_tag }}" ]]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install kustomize
+        run: |
+          curl -sL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Update image tags in production overlay
+        run: |
+          cd k8s/overlays/production
+          kustomize edit set image \
+            ghcr.io/pawanITC/user-service=ghcr.io/${{ github.repository_owner }}/user-service:${{ steps.tag.outputs.tag }} \
+            ghcr.io/pawanITC/order-service=ghcr.io/${{ github.repository_owner }}/order-service:${{ steps.tag.outputs.tag }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -k k8s/overlays/production
+          echo "Waiting for rollout..."
+          kubectl rollout status deployment/user-service  -n microservices --timeout=5m
+          kubectl rollout status deployment/order-service -n microservices --timeout=5m
+
+      - name: Verify health endpoints
+        run: |
+          sleep 10
+          kubectl run health-check --image=curlimages/curl --restart=Never --rm -i \
+            -- curl -sf http://user-service.microservices.svc.cluster.local/actuator/health
+          kubectl run health-check2 --image=curlimages/curl --restart=Never --rm -i \
+            -- curl -sf http://order-service.microservices.svc.cluster.local/actuator/health
+
+      - name: Commit updated kustomization (for GitOps audit trail)
+        if: success()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/overlays/production/kustomization.yaml
+          git diff --staged --quiet || git commit -m "chore: deploy ${{ steps.tag.outputs.tag }} to production [skip ci]"
+          git push
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Deployment to production failed! Tag: ${{ steps.tag.outputs.tag }}"
+          echo "Run 'kubectl rollout undo deployment/user-service -n microservices' to rollback"

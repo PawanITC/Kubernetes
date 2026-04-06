@@ -1,0 +1,53 @@
+# ── Java / Maven ─────────────────────────────────────────────────────────────
+target/
+*.jar
+*.war
+*.ear
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+.project
+.classpath
+.settings/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+.docker/
+
+# ── Kubernetes / Secrets (NEVER COMMIT REAL SECRETS) ─────────────────────────
+*-secret.yaml
+!k8s/overlays/local/secrets.yaml
+*.kubeconfig
+kubeconfig
+.kube/
+
+# ── Helm ──────────────────────────────────────────────────────────────────────
+charts/*.tgz
+helm/*/charts/
+
+# ── Environment / Config ──────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.env
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Temporary ────────────────────────────────────────────────────────────────
+tmp/
+temp/

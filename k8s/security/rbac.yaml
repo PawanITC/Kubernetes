@@ -1,0 +1,68 @@
+# ============================================================
+# RBAC: least-privilege roles for each microservice
+# ============================================================
+---
+# user-service Role: can only read its own ConfigMap and Secret
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: user-service-role
+  namespace: microservices
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    resourceNames: ["user-service-config", "user-service-secret"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: user-service-rolebinding
+  namespace: microservices
+subjects:
+  - kind: ServiceAccount
+    name: user-service
+    namespace: microservices
+roleRef:
+  kind: Role
+  name: user-service-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# order-service Role: can only read its own ConfigMap and Secret
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: order-service-role
+  namespace: microservices
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    resourceNames: ["order-service-config", "order-service-secret"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: order-service-rolebinding
+  namespace: microservices
+subjects:
+  - kind: ServiceAccount
+    name: order-service
+    namespace: microservices
+roleRef:
+  kind: Role
+  name: order-service-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Read-only ClusterRole for monitoring/debugging tools
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: microservices-viewer
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]

@@ -1,0 +1,24 @@
+# App-of-Apps: This single ArgoCD Application manages all other Applications.
+# When this is synced, ArgoCD automatically discovers and creates all child apps.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: microservices-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: microservices
+  source:
+    repoURL: https://github.com/PawanITC/Kubernetes.git
+    targetRevision: HEAD
+    path: argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true       # Delete resources removed from git
+      selfHeal: true    # Revert manual changes made in cluster
+    syncOptions:
+      - CreateNamespace=true
