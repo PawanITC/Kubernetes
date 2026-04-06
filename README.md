@@ -316,6 +316,203 @@ See [docs/KUBERNETES_COMPLETE_GUIDE.md](docs/KUBERNETES_COMPLETE_GUIDE.md) for t
 
 ---
 
+## Helm — Package Manager for Kubernetes
+
+### The Problem Helm Solves
+
+Deploying even a single microservice to Kubernetes requires many YAML files: a Deployment, a Service, a ConfigMap, an Ingress, an HPA, RBAC roles, and more. When you need to deploy the same service to three environments (local, staging, production), you end up copy-pasting those files and manually editing hostnames, replica counts, image tags, and resource limits. One typo breaks production. Helm solves this by turning your Kubernetes manifests into **parameterized templates**.
+
+Think of Helm like a `.exe` installer for Windows — instead of manually creating folders, copying files, and editing the registry, you run one command and everything is set up correctly. Helm does the same for Kubernetes.
+
+---
+
+### Core Concepts
+
+| Concept | What it is | Analogy |
+|---------|-----------|---------|
+| **Chart** | A directory of templates + default values | An installer package (like a `.deb` or `.exe`) |
+| **Release** | One installation of a chart into a namespace | An installed program (you can install the same chart twice with different names) |
+| **values.yaml** | Default configuration variables | The settings/options panel for the installer |
+| **templates/** | Kubernetes YAML files with `{{ }}` placeholders | A Word mail-merge template |
+| **Repository** | A collection of published charts | An app store (like `apt`, `npm`, `brew`) |
+
+---
+
+### What Happens Internally During `helm install`
+
+When you run:
+```bash
+helm upgrade --install user-service ./helm/user-service -f values-local.yaml -n microservices
+```
+
+Helm executes these 6 steps internally:
+
+**Step 1 — Fetch the Chart**
+Helm reads the chart directory (or downloads from a repository). It finds `Chart.yaml` (metadata), `values.yaml` (defaults), and all files inside `templates/`.
+
+**Step 2 — Merge Values**
+Helm layers values in priority order (highest wins):
+```
+Chart defaults (values.yaml)
+    ↓ overridden by
+values-local.yaml (passed via -f flag)
+    ↓ overridden by
+--set flags on the command line
+```
+The result is one merged map of key-value pairs used for rendering.
+
+**Step 3 — Render Templates (Go Template Engine)**
+Helm uses Go's `text/template` engine to substitute `{{ }}` placeholders with real values.
+
+Example template (`templates/deployment.yaml`):
+```yaml
+replicas: {{ .Values.replicaCount }}
+image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+```
+
+With `values.yaml`:
+```yaml
+replicaCount: 1
+image:
+  repository: ghcr.io/pawanITC/user-service
+  tag: latest
+```
+
+Helm renders this to:
+```yaml
+replicas: 1
+image: ghcr.io/pawanITC/user-service:latest
+```
+
+You can also use logic in templates:
+```yaml
+{{- if .Values.ingress.enabled }}
+# This entire block is included only if ingress.enabled = true
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+...
+{{- end }}
+```
+
+**Step 4 — Validate**
+The rendered YAML is validated against the Kubernetes API server schema. If a field is wrong (e.g., `replicas: "one"` instead of `replicas: 1`), Helm rejects it before applying anything.
+
+**Step 5 — Apply to Kubernetes**
+Helm sends all the rendered manifests to the Kubernetes API server in dependency order (Namespace → ConfigMap → ServiceAccount → Deployment → Service → Ingress).
+
+**Step 6 — Store the Release as a Secret**
+This is what makes Helm special. After a successful install, Helm serializes the entire rendered state (all YAML files) into a Kubernetes Secret in the same namespace:
+
+```bash
+kubectl get secrets -n microservices
+# NAME                           TYPE
+# sh.helm.release.v1.user-service.v1   helm.sh/release.v1
+# sh.helm.release.v1.user-service.v2   helm.sh/release.v1  ← after upgrade
+```
+
+Each upgrade creates a new versioned Secret. This is how `helm rollback` works — it re-applies the YAML from a previous Secret.
+
+---
+
+### How Helm Tracks State (vs `kubectl apply`)
+
+| Feature | `kubectl apply` | `helm install` |
+|---------|----------------|---------------|
+| State tracking | None (stateless) | Stores full release history as Secrets |
+| Rollback | Manual (`kubectl rollout undo`) | `helm rollback user-service 1` |
+| Diff before apply | Not built-in | `helm diff upgrade` (plugin) |
+| Delete all resources | Must track each resource manually | `helm uninstall user-service` removes everything |
+| Multi-environment | Separate files per env | One chart + separate values files |
+| Atomic upgrades | No (partial apply possible) | `--atomic` flag rolls back on failure |
+
+---
+
+### What `ingress-nginx` Chart Actually Installs
+
+When you run:
+```bash
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
+```
+
+Helm deploys ~15 Kubernetes resources in one command:
+
+```
+Namespace:            ingress-nginx
+ServiceAccount:       ingress-nginx
+ClusterRole:          ingress-nginx         ← permission to watch Ingress objects cluster-wide
+ClusterRoleBinding:   ingress-nginx
+Role:                 ingress-nginx (leader election)
+RoleBinding:          ingress-nginx
+ConfigMap:            ingress-nginx-controller  ← nginx.conf settings
+ConfigMap:            ingress-nginx-tcp-services
+Deployment:           ingress-nginx-controller  ← the actual nginx process
+Service (LoadBalancer): ingress-nginx-controller  ← external IP from cloud provider
+Service (ClusterIP):  ingress-nginx-controller-admission
+ValidatingWebhookConfiguration:  ← validates Ingress objects before they're saved
+Job:                  ingress-nginx-admission-create
+Job:                  ingress-nginx-admission-patch
+```
+
+### Traffic Flow Through ingress-nginx
+
+```
+Internet
+    │  HTTP/HTTPS request
+    ▼
+LoadBalancer Service (external IP: 203.0.113.10)
+    │  forwards to pod port 80/443
+    ▼
+ingress-nginx Controller Pod (runs NGINX process)
+    │  reads all Ingress objects in the cluster
+    │  routes based on host + path rules:
+    │    microservices.local/api/v1/users  → user-service:8081
+    │    microservices.local/api/v1/orders → order-service:8082
+    ▼
+ClusterIP Service (user-service or order-service)
+    │  load balances across pods
+    ▼
+Application Pod (Spring Boot)
+```
+
+The ingress-nginx controller continuously watches for Ingress resource changes using the Kubernetes watch API. When you create or update an Ingress object, the controller automatically regenerates its `nginx.conf` and reloads NGINX — no manual intervention needed.
+
+---
+
+### Useful Helm Commands
+
+```bash
+# Install or upgrade a release
+helm upgrade --install <release-name> <chart-path> -f values.yaml -n <namespace>
+
+# List all releases in a namespace
+helm list -n microservices
+
+# Show rendered templates without applying (dry-run)
+helm template user-service ./helm/user-service -f values-local.yaml
+
+# Check what will change before upgrading
+helm diff upgrade user-service ./helm/user-service -f values-local.yaml   # requires helm-diff plugin
+
+# View release history
+helm history user-service -n microservices
+
+# Roll back to a previous version
+helm rollback user-service 1 -n microservices
+
+# Uninstall a release (removes all its resources)
+helm uninstall user-service -n microservices
+
+# Download a chart from a repository
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm pull ingress-nginx/ingress-nginx --untar   # extracts chart locally
+
+# Inspect default values of any chart
+helm show values ingress-nginx/ingress-nginx
+```
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE)
