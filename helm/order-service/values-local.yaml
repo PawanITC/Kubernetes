@@ -44,7 +44,9 @@ securityContext:
 ingress:
   enabled: true
   className: nginx
-  annotations: {}
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: ""
   hosts:
     - host: microservices.local
       paths:
