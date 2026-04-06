@@ -28,6 +28,8 @@ spec:
   namespaceResourceWhitelist:
     - group: "argoproj.io"
       kind: Application
+    - group: ""
+      kind: Secret
     - group: "apps"
       kind: Deployment
     - group: ""
