@@ -8,6 +8,7 @@ replicaCount: 1
 
 image:
   # Use locally built image — never pull from registry
+  repository: user-service
   pullPolicy: Never
   tag: "latest"
 
@@ -30,8 +31,9 @@ configMap:
   LOGGING_LEVEL_COM_EXAMPLE_USERSERVICE: "DEBUG"
   SPRING_H2_CONSOLE_ENABLED: "true"
 
-# No database secret needed for H2
+# No database secret needed for H2 — clear host so no PostgreSQL URL is injected
 database:
+  host: ""
   existingSecret: ""
 
 # Allow writes to container filesystem (easier local debugging)

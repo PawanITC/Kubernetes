@@ -5,6 +5,7 @@
 replicaCount: 1
 
 image:
+  repository: order-service
   pullPolicy: Never
   tag: "latest"
 
@@ -29,6 +30,7 @@ configMap:
   SPRING_H2_CONSOLE_ENABLED: "true"
 
 database:
+  host: ""
   existingSecret: ""
 
 securityContext:
